@@ -57,3 +57,48 @@ cat("Filas prueba:       ", nrow(test_modelo),  "\n")
 
 Para garantizar una comparación válida entre el modelo de Regresión Logística y los algoritmos evaluados en laboratorios anteriores, se reutilizaron exactamente los mismos conjuntos de entrenamiento y prueba generados desde el Laboratorio 3. Utilizando `set.seed(123)` y una división 80/20, el conjunto de entrenamiento quedó con 48,442 observaciones y el de prueba con 12,173, ambos con las mismas 6 variables: `price`, `accommodates`, `bedrooms`, `bathrooms`, `number_of_reviews` y `review_scores_rating`, aplicando los mismos filtros de precio menor a $1,000 y habitaciones menores o iguales a 10. Mantener estas condiciones idénticas es fundamental porque cualquier diferencia en los datos de entrenamiento o prueba invalidaría la comparación entre modelos, ya que una mejora en las métricas podría deberse a los datos y no al algoritmo en sí.
 
+# Actividad 1 - Variable Dicotómica
+```{r variables-dicotomicas}
+# Mismos puntos de corte P33=136 y P67=250 del Lab 4 y 5
+precios_validos <- listings_clean_comp %>%
+  filter(!is.na(price), price > 0, price < 1000) %>%
+  pull(price)
+
+p33 <- quantile(precios_validos, 0.33)
+p67 <- quantile(precios_validos, 0.67)
+cat("P33:", round(p33, 2), "| P67:", round(p67, 2), "\n")
+
+# Crear variables dicotómicas en train
+train_rl <- train_modelo %>%
+  mutate(
+    es_cara   = ifelse(price > p67, 1, 0),
+    es_media  = ifelse(price > p33 & price <= p67, 1, 0),
+    es_barata = ifelse(price <= p33, 1, 0)
+  )
+
+# Crear variables dicotómicas en test
+test_rl <- test_modelo %>%
+  mutate(
+    es_cara   = ifelse(price > p67, 1, 0),
+    es_media  = ifelse(price > p33 & price <= p67, 1, 0),
+    es_barata = ifelse(price <= p33, 1, 0)
+  )
+
+# Verificar distribución
+cat("\n--- Distribución en entrenamiento ---\n")
+cat("Es cara   (1):", sum(train_rl$es_cara),
+    "| No cara  (0):", sum(train_rl$es_cara   == 0), "\n")
+cat("Es media  (1):", sum(train_rl$es_media),
+    "| No media (0):", sum(train_rl$es_media  == 0), "\n")
+cat("Es barata (1):", sum(train_rl$es_barata),
+    "| No barata(0):", sum(train_rl$es_barata == 0), "\n")
+
+cat("\n--- Distribución en prueba ---\n")
+cat("Es cara   (1):", sum(test_rl$es_cara),
+    "| No cara  (0):", sum(test_rl$es_cara   == 0), "\n")
+cat("Es media  (1):", sum(test_rl$es_media),
+    "| No media (0):", sum(test_rl$es_media  == 0), "\n")
+cat("Es barata (1):", sum(test_rl$es_barata),
+    "| No barata(0):", sum(test_rl$es_barata == 0), "\n")
+```
+Se crearon tres variables dicotómicas a partir de los mismos puntos de corte P33=136 y P67=250 definidos desde el Laboratorio 4, garantizando consistencia con todos los modelos anteriores. La variable `es_cara` toma el valor 1 cuando el precio por noche supera los 250 y 0 en caso contrario, `es_media` vale 1 cuando el precio se encuentra entre 136 y 250, y `es_barata` vale 1 cuando el precio es igual o menor a 136. En el conjunto de entrenamiento, 14,963 propiedades son caras, 16,690 son de precio medio y 16,789 son baratas, mientras que en el conjunto de prueba hay 3,741 caras, 4,265 medias y 4,167 baratas. La distribución es bastante balanceada entre las tres categorías tanto en entrenamiento como en prueba, lo cual es favorable para el entrenamiento de los modelos ya que ninguna clase domina sobre las demás y el modelo tendrá suficientes ejemplos de cada categoría para aprender sus patrones correctamente.
