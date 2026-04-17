@@ -176,3 +176,114 @@ vif(modelo_cara$finalModel)
 El análisis de multicolinealidad mediante el Factor de Inflación de Varianza (VIF) muestra que ninguna variable presenta valores problemáticos: accommodates (2.55), bedrooms (2.86), bathrooms (1.62), number_of_reviews (1.02) y review_scores_rating (1.01), todos muy por debajo del umbral de 5 que indicaría multicolinealidad moderada y lejos del valor de 10 que sería severo. Esto confirma que aunque las variables están relacionadas entre sí, ninguna está siendo explicada por las demás de forma que afecte la estabilidad del modelo.
 
 El mapa de correlación complementa este análisis y muestra que la relación más fuerte entre predictores es entre accommodates y bedrooms (0.83), lo que tiene sentido ya que propiedades con más habitaciones generalmente alojan más personas. También existe una correlación moderada entre bathrooms y accommodates (0.67) y entre bathrooms y bedrooms (0.71). Sin embargo, estas correlaciones no son suficientemente altas como para generar multicolinealidad problemática, lo cual queda confirmado por los valores de VIF. Las variables number_of_reviews y review_scores_rating prácticamente no tienen correlación con el resto de predictores, lo que indica que aportan información completamente independiente al modelo. En conclusión, el modelo está bien construido, no presenta problemas de multicolinealidad y todas sus variables son significativas y aportan información relevante para predecir si una propiedad es cara o no.
+
+# Actividad 5: Conjunto de prueba.
+
+```{r}
+acc   <- cm_cara$overall["Accuracy"]
+kappa <- cm_cara$overall["Kappa"]
+sens  <- cm_cara$byClass["Sensitivity"]
+spec  <- cm_cara$byClass["Specificity"]
+ppv   <- cm_cara$byClass["Pos Pred Value"]   # Precisión
+npv   <- cm_cara$byClass["Neg Pred Value"]
+f1    <- cm_cara$byClass["F1"]
+bacc  <- cm_cara$byClass["Balanced Accuracy"]
+
+# AUC - ROC
+library(pROC)
+roc_cara <- roc(test_rl$es_cara, pred_prob_cara, quiet = TRUE)
+auc_val  <- as.numeric(auc(roc_cara))
+
+cat("------ Eficiencia en conjunto de prueba ------\n")
+cat("Accuracy         :", round(acc,  4), "\n")
+cat("Kappa            :", round(kappa,4), "\n")
+cat("Sensibilidad     :", round(sens, 4), "\n")
+cat("Especificidad    :", round(spec, 4), "\n")
+cat("Precisión (PPV)  :", round(ppv,  4), "\n")
+cat("NPV              :", round(npv,  4), "\n")
+cat("F1-Score         :", round(f1,   4), "\n")
+cat("Balanced Accuracy:", round(bacc, 4), "\n")
+cat("AUC              :", round(auc_val, 4), "\n")
+
+
+plot(roc_cara, main = "Curva ROC - Modelo 'Es cara'",
+     col = "steelblue", lwd = 2, legacy.axes = TRUE)
+abline(a = 0, b = 1, lty = 2, col = "gray")
+legend("bottomright", legend = paste("AUC =", round(auc_val, 4)),
+       col = "steelblue", lwd = 2, bty = "n")
+```
+
+La curva ROC obtenida confirma visualmente lo anticipado por las métricas numéricas. La curva se aleja claramente de la diagonal de referencia  y se acerca a la esquina superior izquierda, lo cual indica buena capacidad discriminativa del modelo. El AUC de 0.8172 se interpreta como que, si tomamos al azar una propiedad cara y una no cara, el modelo le asignará una probabilidad mayor a la cara el 81.72% de las veces.
+
+# Actividad 6
+
+```{r}
+# Predicción y error
+pred_prob_train <- predict(modelo_cara, newdata = train_rl, type = "prob")[, "1"]
+pred_train      <- ifelse(pred_prob_train >= 0.5, 1, 0)
+error_train     <- mean(pred_train != train_rl$es_cara)
+acc_train       <- 1 - error_train
+
+
+error_test <- mean(pred_cara != test_rl$es_cara)
+acc_test   <- 1 - error_test
+
+
+acc_cv    <- modelo_cara$results$Accuracy
+error_cv  <- 1 - acc_cv
+
+cat("------ Comparación de errores ------\n")
+cat("Accuracy entrenamiento :", round(acc_train, 4),
+    "| Error:", round(error_train, 4), "\n")
+cat("Accuracy validación CV :", round(acc_cv,    4),
+    "| Error:", round(error_cv,    4), "\n")
+cat("Accuracy prueba        :", round(acc_test,  4),
+    "| Error:", round(error_test,  4), "\n")
+cat("Diferencia train - test:", round(acc_train - acc_test, 4), "\n")
+```
+
+
+```{r}
+# Curvas de aprendizaje.
+set.seed(123)
+tamanos    <- seq(0.1, 1.0, by = 0.1)
+err_train_v <- numeric(length(tamanos))
+err_test_v  <- numeric(length(tamanos))
+
+for (i in seq_along(tamanos)) {
+  n_sub <- floor(tamanos[i] * nrow(train_rl))
+  idx   <- sample(1:nrow(train_rl), n_sub)
+  sub   <- train_rl[idx, ]
+
+  mod_tmp <- glm(es_cara ~ accommodates + bedrooms + bathrooms +
+                           number_of_reviews + review_scores_rating,
+                 data = sub, family = binomial)
+
+ 
+  p_tr <- ifelse(predict(mod_tmp, sub, type = "response") >= 0.5, 1, 0)
+  err_train_v[i] <- mean(p_tr != sub$es_cara)
+
+
+  p_te <- ifelse(predict(mod_tmp, test_rl, type = "response") >= 0.5, 1, 0)
+  err_test_v[i] <- mean(p_te != test_rl$es_cara)
+}
+
+df_curvas <- data.frame(
+  Tamano = tamanos * nrow(train_rl),
+  Entrenamiento = err_train_v,
+  Prueba = err_test_v
+) %>%
+  pivot_longer(cols = c(Entrenamiento, Prueba),
+               names_to = "Conjunto", values_to = "Error")
+
+ggplot(df_curvas, aes(x = Tamano, y = Error, color = Conjunto)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Curvas de Aprendizaje - Regresión Logística",
+       x = "Tamaño del conjunto de entrenamiento",
+       y = "Error de clasificación") +
+  theme_minimal() +
+  scale_color_manual(values = c("Entrenamiento" = "steelblue",
+                                "Prueba" = "firebrick"))
+```
+La gráfica de curvas de aprendizaje confirma de manera contundente que el modelo de Regresión Logística no presenta sobreajuste. Tanto el error de entrenamiento (línea azul) como el error de prueba (línea roja) convergen rápidamente a un valor muy similar en torno al 22.3-22.5%, y la separación entre ambas curvas es mínima.
