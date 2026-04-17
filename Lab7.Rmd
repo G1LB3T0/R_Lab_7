@@ -15,6 +15,7 @@ library(readr)
 library(tidyr)
 library(ggplot2)
 library(caret)
+library(corrplot)
 ```
 
 ```{r carga-datos-rl}
@@ -102,3 +103,76 @@ cat("Es barata (1):", sum(test_rl$es_barata),
     "| No barata(0):", sum(test_rl$es_barata == 0), "\n")
 ```
 Se crearon tres variables dicotómicas a partir de los mismos puntos de corte P33=136 y P67=250 definidos desde el Laboratorio 4, garantizando consistencia con todos los modelos anteriores. La variable `es_cara` toma el valor 1 cuando el precio por noche supera los 250 y 0 en caso contrario, `es_media` vale 1 cuando el precio se encuentra entre 136 y 250, y `es_barata` vale 1 cuando el precio es igual o menor a 136. En el conjunto de entrenamiento, 14,963 propiedades son caras, 16,690 son de precio medio y 16,789 son baratas, mientras que en el conjunto de prueba hay 3,741 caras, 4,265 medias y 4,167 baratas. La distribución es bastante balanceada entre las tres categorías tanto en entrenamiento como en prueba, lo cual es favorable para el entrenamiento de los modelos ya que ninguna clase domina sobre las demás y el modelo tendrá suficientes ejemplos de cada categoría para aprender sus patrones correctamente.
+
+# Actividad 3 - Modelo
+```{r rl-modelo-cara}
+# Actividad 3: Modelo de Regresión Logística – "¿Es cara o no?"
+# Variable respuesta: es_cara (1 = cara, 0 = no cara)
+# Validación cruzada 10-fold igual que la maestra
+
+cv_ctrl <- trainControl(method = "cv", number = 10)
+
+set.seed(123)
+modelo_cara <- caret::train(
+  as.factor(es_cara) ~ accommodates + bedrooms + bathrooms +
+                       number_of_reviews + review_scores_rating,
+  data      = train_rl,
+  method    = "glm",
+  family    = binomial,
+  trControl = cv_ctrl
+)
+
+summary(modelo_cara)
+cat("\nAIC:", AIC(modelo_cara$finalModel), "\n")
+cat("BIC:", BIC(modelo_cara$finalModel), "\n")
+```
+
+Se elaboró un modelo de Regresión Logística con validación cruzada de 10 pliegues para predecir si una propiedad es cara o no, usando las 5 variables predictoras numéricas disponibles. El resumen del modelo muestra que todas las variables son altamente significativas (p < 2e-16 en todos los casos), lo que indica que cada una aporta información relevante para determinar si una propiedad pertenece al segmento caro. Los coeficientes positivos de bathrooms (0.7388), review_scores_rating (0.6001), accommodates (0.2129) y bedrooms (0.2069) indican que a mayor valor de estas variables, mayor es la probabilidad de que una propiedad sea cara, lo cual tiene sentido lógico: propiedades más grandes y mejor calificadas tienden a tener precios más altos. Por el contrario, number_of_reviews tiene un coeficiente negativo (-0.0035), sugiriendo que propiedades con muchas reseñas tienden a ser menos caras, posiblemente porque son propiedades más accesibles con mayor rotación de huéspedes. El AIC del modelo es 46,185.63 y el BIC 46,238.36, valores que servirán de referencia para comparar con modelos posteriores.
+
+
+```{r rl-prediccion-cara}
+# Predicción con umbral 0.5
+pred_prob_cara <- predict(modelo_cara,
+                          newdata = test_rl,
+                          type    = "prob")[, "1"]
+
+pred_cara <- ifelse(pred_prob_cara >= 0.5, 1, 0)
+
+cm_cara <- confusionMatrix(as.factor(pred_cara),
+                           as.factor(test_rl$es_cara),
+                           positive = "1")
+print(cm_cara)
+```
+
+Evaluado sobre el conjunto de prueba con umbral de decisión en 0.5, el modelo alcanzó un Accuracy de 77.46% y un Kappa de 0.4231, lo que representa una concordancia moderada más allá del azar. La Especificidad es alta con 90.29%, lo que significa que el modelo identifica correctamente el 90% de las propiedades que no son caras. Sin embargo, la Sensibilidad es de apenas 48.54%, indicando que solo clasifica correctamente la mitad de las propiedades que sí son caras. Esto sugiere que el umbral de 0.5 genera un modelo conservador que prefiere predecir "no cara" ante la duda, lo cual se refleja en que de 3,741 propiedades caras reales, el modelo solo identificó correctamente 1,816 y dejó escapar 1,925.
+
+
+# Actividad 4 - Correlacion
+```{r rl-correlacion}
+# Actividad 4: Correlación entre predictores
+library(corrplot)
+
+cor_matrix <- cor(train_rl %>%
+                    select(accommodates, bedrooms, bathrooms,
+                           number_of_reviews, review_scores_rating))
+print(round(cor_matrix, 3))
+
+corrplot(cor_matrix,
+         method      = "color",
+         type        = "upper",
+         addCoef.col = "black",
+         tl.col      = "black",
+         title       = "Correlación entre predictores",
+         mar         = c(0,0,1,0))
+```
+
+```{r rl-vif}
+# VIF para detectar multicolinealidad
+# VIF > 5 indica problema, VIF > 10 es severo
+library(car)
+vif(modelo_cara$finalModel)
+```
+
+El análisis de multicolinealidad mediante el Factor de Inflación de Varianza (VIF) muestra que ninguna variable presenta valores problemáticos: accommodates (2.55), bedrooms (2.86), bathrooms (1.62), number_of_reviews (1.02) y review_scores_rating (1.01), todos muy por debajo del umbral de 5 que indicaría multicolinealidad moderada y lejos del valor de 10 que sería severo. Esto confirma que aunque las variables están relacionadas entre sí, ninguna está siendo explicada por las demás de forma que afecte la estabilidad del modelo.
+
+El mapa de correlación complementa este análisis y muestra que la relación más fuerte entre predictores es entre accommodates y bedrooms (0.83), lo que tiene sentido ya que propiedades con más habitaciones generalmente alojan más personas. También existe una correlación moderada entre bathrooms y accommodates (0.67) y entre bathrooms y bedrooms (0.71). Sin embargo, estas correlaciones no son suficientemente altas como para generar multicolinealidad problemática, lo cual queda confirmado por los valores de VIF. Las variables number_of_reviews y review_scores_rating prácticamente no tienen correlación con el resto de predictores, lo que indica que aportan información completamente independiente al modelo. En conclusión, el modelo está bien construido, no presenta problemas de multicolinealidad y todas sus variables son significativas y aportan información relevante para predecir si una propiedad es cara o no.
