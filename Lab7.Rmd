@@ -356,3 +356,46 @@ par(mfrow = c(1, 1))
 El tuneo del modelo mediante regularización probó dos técnicas: Ridge (alpha=0) y Lasso (alpha=1), ambas usando validación cruzada de 10 pliegues para encontrar el mejor valor de lambda. Para Ridge el lambda óptimo fue 0.0213 y para Lasso 0.00128, valores pequeños que indican que la penalización necesaria es mínima, lo cual es consistente con el hecho de que el modelo base ya no presentaba sobreajuste. Los gráficos de Lambda vs Error muestran cómo la devianza binomial varía según el nivel de regularización. En ambos casos, la devianza disminuye conforme el lambda se reduce, alcanzando su mínimo en los valores óptimos seleccionados por la validación cruzada, representados por la primera línea punteada vertical. La segunda línea punteada indica el lambda más grande dentro de un error estándar del mínimo, que es una opción más conservadora.
 
 Comparando los tres modelos, el modelo logístico base obtuvo el mejor Accuracy con 77.46% y Kappa de 0.4231, seguido muy de cerca por Lasso con 77.42% y Kappa de 0.4212. Ridge quedó ligeramente por debajo con 76.95% y Kappa de 0.3957. Las diferencias son mínimas, lo que confirma que el modelo base ya estaba bien ajustado y la regularización no aportó mejoras significativas. En conclusión, se mantiene el modelo logístico base como el mejor de los tres ya que tiene el mejor desempeño y además permite calcular el AIC y BIC para comparaciones posteriores.
+
+# Actividad 8 - Análisis de Eficiencia
+```{r rl-confusion-profvis}
+# Visualización matriz de confusión del mejor modelo
+as.data.frame(cm_cara$table) %>%
+  ggplot(aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), fontface = "bold", size = 6) +
+  scale_fill_gradient(low = "#E3F2FD", high = "#1565C0") +
+  labs(title    = "Matriz de Confusión – Regresión Logística",
+       subtitle = "Modelo 'Es cara o no' | Umbral = 0.5",
+       x = "Categoría real", y = "Categoría predicha") +
+  theme_minimal()
+
+# Tasa de error por clase
+errores_rl <- data.frame(
+  Clase         = c("No cara (0)", "Cara (1)"),
+  Correctos     = c(cm_cara$table[1,1], cm_cara$table[2,2]),
+  Errores_total = c(cm_cara$table[1,2], cm_cara$table[2,1])
+)
+errores_rl$Tasa_error <- round(
+  errores_rl$Errores_total /
+  (errores_rl$Correctos + errores_rl$Errores_total) * 100, 2)
+print(errores_rl)
+```
+La matriz de confusión del modelo de Regresión Logística con umbral 0.5 muestra un comportamiento asimétrico entre las dos clases. El modelo clasifica correctamente 7,613 propiedades no caras y 1,816 propiedades caras, pero comete errores notables en ambas direcciones. La clase donde el modelo se equivoca **menos** es **No cara** con una tasa de error del 20.18%, lo que significa que de 9,538 propiedades realmente no caras, el modelo clasificó incorrectamente 1,925 como caras. La clase donde el modelo se equivoca **más** es **Cara** con una tasa de error del 31.08%, es decir, de 3,741 propiedades realmente caras, 819 fueron clasificadas incorrectamente como no caras.
+
+Desde la perspectiva del negocio de SmartStay Advisors, el error más grave es el de las 1,925 propiedades no caras clasificadas como caras, ya que implicaría presentarle al cliente una propiedad más costosa de lo que realmente es, generando expectativas incorrectas. Sin embargo, el error de clasificar 819 propiedades caras como no caras también es relevante porque podría llevar a subestimar el presupuesto necesario del cliente. En términos generales el modelo tiene un desempeño aceptable para un modelo binario, siendo más conservador al predecir la clase cara, lo cual explica la alta especificidad observada anteriormente.
+
+```{r rl-rendimiento}
+# Rendimiento computacional con Rprof
+Rprof(memory.profiling = TRUE)
+  modelo_temp <- glm(es_cara ~ accommodates + bedrooms + bathrooms +
+                     number_of_reviews + review_scores_rating,
+                     data   = train_rl,
+                     family = binomial())
+Rprof(NULL)
+pm <- summaryRprof(memory = "both")
+
+cat("Tiempo de ejecución:", pm$sampling.time, "ms\n")
+cat("Memoria utilizada:  ", sum(pm$by.total$mem.total), "MB\n")
+```
+En cuanto al rendimiento computacional, el modelo de Regresión Logística resultó ser extremadamente eficiente en tiempo, completando su entrenamiento en apenas **0.08 ms**, lo que lo convierte en uno de los algoritmos más rápidos de todos los evaluados en los laboratorios anteriores. Esto contrasta notablemente con KNN que tardó varios minutos con el mismo dataset. La memoria utilizada fue de **372.2 MB**, un consumo moderado considerando que el dataset de entrenamiento tiene 48,442 observaciones. Esta eficiencia computacional es una ventaja importante de la Regresión Logística frente a algoritmos como Random Forest o KNN, ya que permite reentrenar el modelo rápidamente ante nuevos datos sin un costo computacional elevado, lo cual es relevante para SmartStay Advisors en un entorno donde los precios y disponibilidad de propiedades cambian constantemente.
