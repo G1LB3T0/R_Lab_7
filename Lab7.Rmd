@@ -16,6 +16,7 @@ library(tidyr)
 library(ggplot2)
 library(caret)
 library(corrplot)
+library(glmnet)
 ```
 
 ```{r carga-datos-rl}
@@ -287,3 +288,71 @@ ggplot(df_curvas, aes(x = Tamano, y = Error, color = Conjunto)) +
                                 "Prueba" = "firebrick"))
 ```
 La gráfica de curvas de aprendizaje confirma de manera contundente que el modelo de Regresión Logística no presenta sobreajuste. Tanto el error de entrenamiento (línea azul) como el error de prueba (línea roja) convergen rápidamente a un valor muy similar en torno al 22.3-22.5%, y la separación entre ambas curvas es mínima.
+
+# Actividad 7 - Tuneo
+```{r rl-tuneo}
+# La regularización penaliza coeficientes grandes para evitar sobreajuste
+# alpha = 0 → Ridge | alpha = 1 → Lasso | alpha intermedio → Elastic Net
+
+# Preparar matrices para glmnet
+x_train <- model.matrix(es_cara ~ accommodates + bedrooms + bathrooms +
+                        number_of_reviews + review_scores_rating,
+                        data = train_rl)[, -1]
+y_train <- train_rl$es_cara
+
+x_test <- model.matrix(es_cara ~ accommodates + bedrooms + bathrooms +
+                       number_of_reviews + review_scores_rating,
+                       data = test_rl)[, -1]
+y_test <- test_rl$es_cara
+
+# Ridge (alpha = 0)
+set.seed(123)
+modelo_ridge <- cv.glmnet(x_train, y_train,
+                          family  = "binomial",
+                          alpha   = 0,
+                          nfolds  = 10)
+cat("Mejor lambda Ridge:", modelo_ridge$lambda.min, "\n")
+
+# Lasso (alpha = 1)
+set.seed(123)
+modelo_lasso <- cv.glmnet(x_train, y_train,
+                          family  = "binomial",
+                          alpha   = 1,
+                          nfolds  = 10)
+cat("Mejor lambda Lasso:", modelo_lasso$lambda.min, "\n")
+
+# Predicciones con umbral 0.5
+pred_ridge <- ifelse(predict(modelo_ridge, x_test,
+                             s = "lambda.min",
+                             type = "response") >= 0.5, 1, 0)
+pred_lasso <- ifelse(predict(modelo_lasso, x_test,
+                             s = "lambda.min",
+                             type = "response") >= 0.5, 1, 0)
+
+cm_ridge <- confusionMatrix(as.factor(pred_ridge),
+                            as.factor(y_test), positive = "1")
+cm_lasso <- confusionMatrix(as.factor(pred_lasso),
+                            as.factor(y_test), positive = "1")
+
+# Comparación de los 3 modelos
+comparacion_tuneo <- data.frame(
+  Modelo   = c("Logístico base", "Ridge", "Lasso"),
+  Accuracy = round(c(cm_cara$overall["Accuracy"],
+                     cm_ridge$overall["Accuracy"],
+                     cm_lasso$overall["Accuracy"]) * 100, 2),
+  Kappa    = round(c(cm_cara$overall["Kappa"],
+                     cm_ridge$overall["Kappa"],
+                     cm_lasso$overall["Kappa"]), 4),
+  AIC      = round(c(AIC(modelo_cara$finalModel), NA, NA), 2)
+)
+print(comparacion_tuneo)
+
+# Gráfico lambda vs error
+par(mfrow = c(1, 2))
+plot(modelo_ridge, main = "Ridge: Lambda vs Error")
+plot(modelo_lasso, main = "Lasso: Lambda vs Error")
+par(mfrow = c(1, 1))
+```
+El tuneo del modelo mediante regularización probó dos técnicas: Ridge (alpha=0) y Lasso (alpha=1), ambas usando validación cruzada de 10 pliegues para encontrar el mejor valor de lambda. Para Ridge el lambda óptimo fue 0.0213 y para Lasso 0.00128, valores pequeños que indican que la penalización necesaria es mínima, lo cual es consistente con el hecho de que el modelo base ya no presentaba sobreajuste. Los gráficos de Lambda vs Error muestran cómo la devianza binomial varía según el nivel de regularización. En ambos casos, la devianza disminuye conforme el lambda se reduce, alcanzando su mínimo en los valores óptimos seleccionados por la validación cruzada, representados por la primera línea punteada vertical. La segunda línea punteada indica el lambda más grande dentro de un error estándar del mínimo, que es una opción más conservadora.
+
+Comparando los tres modelos, el modelo logístico base obtuvo el mejor Accuracy con 77.46% y Kappa de 0.4231, seguido muy de cerca por Lasso con 77.42% y Kappa de 0.4212. Ridge quedó ligeramente por debajo con 76.95% y Kappa de 0.3957. Las diferencias son mínimas, lo que confirma que el modelo base ya estaba bien ajustado y la regularización no aportó mejoras significativas. En conclusión, se mantiene el modelo logístico base como el mejor de los tres ya que tiene el mejor desempeño y además permite calcular el AIC y BIC para comparaciones posteriores.
