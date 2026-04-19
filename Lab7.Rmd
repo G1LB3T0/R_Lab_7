@@ -2,7 +2,9 @@
 title: "Lab_7"
 author: "Luis Gonzalez 23353 - Joel Jaquez 23369 - Fabian Morales 23267"
 date: "2026-04-17"
-output: pdf_document
+output:
+  pdf_document:
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
@@ -543,3 +545,155 @@ El análisis comparativo de los modelos evaluados evidencia que todos presentan 
 La comparación entre los modelos Base y Lasso bajo el umbral tradicional de 0.5 revela un empate técnico. Ambos presentan niveles similares de accuracy entre el 77%, y sensibilidad entre el 48%, lo que evidencia una limitada capacidad para identificar propiedades de alto valor. En este contexto, Lasso no aporta mejoras sustanciales respecto al modelo Base.
 
 Sin embargo, al ajustar el umbral de decisión del modelo Base a 0.30 se observa una mejora significativa en las métricas clave. En consecuencia, el modelo seleccionado es la regresión logística base con un umbral de decisión de 0.30. Es importante destacar que este ajuste no modifica la estructura matemática del modelo ni sus valores de AIC/BIC, sino únicamente la distribución de errores, alineándola de manera más efectiva con los objetivos del negocio.
+
+# Actividad 11 – Modelo de Regresión Logística Multinomial
+```{r rl-multinomial}
+# Actividad 11: Regresión Logística Multinomial
+# Variable respuesta: 3 categorías (barata, media, cara)
+# Paquete nnet para multinom()
+library(nnet)
+
+# Crear variable categórica en train y test
+train_multi <- train_modelo %>%
+  mutate(
+    precio_cat = case_when(
+      price <= 136 ~ "barata",
+      price <= 250 ~ "media",
+      TRUE         ~ "cara"
+    ) %>% as.factor()
+  ) %>%
+  select(-price)
+
+test_multi <- test_modelo %>%
+  mutate(
+    precio_cat = case_when(
+      price <= 136 ~ "barata",
+      price <= 250 ~ "media",
+      TRUE         ~ "cara"
+    ) %>% as.factor()
+  ) %>%
+  select(-price)
+
+cat("Distribución entrenamiento:\n")
+print(table(train_multi$precio_cat))
+cat("\nDistribución prueba:\n")
+print(table(test_multi$precio_cat))
+```
+
+```{r rl-multinomial-modelo}
+# Modelo multinomial con validación cruzada
+ctrl_multi <- trainControl(method = "cv", number = 10)
+
+set.seed(123)
+modelo_multi <- caret::train(
+  precio_cat ~ .,
+  data      = train_multi,
+  method    = "multinom",
+  trControl = ctrl_multi,
+  trace     = FALSE
+)
+
+summary(modelo_multi)
+cat("\nAIC:", AIC(modelo_multi$finalModel), "\n")
+cat("BIC:", BIC(modelo_multi$finalModel), "\n")
+```
+
+```{r rl-multinomial-tuneo}
+# Tuneo con decay (regularización para multinom)
+# decay controla la penalización de los coeficientes
+grid_multi <- expand.grid(decay = c(0, 0.001, 0.01, 0.1, 0.5, 1))
+
+set.seed(123)
+modelo_multi_tuned <- caret::train(
+  precio_cat ~ .,
+  data      = train_multi,
+  method    = "multinom",
+  trControl = ctrl_multi,
+  tuneGrid  = grid_multi,
+  trace     = FALSE
+)
+
+print(modelo_multi_tuned)
+cat("\nMejor decay:", modelo_multi_tuned$bestTune$decay, "\n")
+
+# Gráfico Accuracy vs decay
+plot(modelo_multi_tuned,
+     main = "Regresión Logística Multinomial: Accuracy vs Decay",
+     xlab = "Decay (regularización)",
+     ylab = "Accuracy (CV 10-fold)")
+```
+
+```{r rl-multinomial-prediccion}
+# Predicción con el mejor modelo tuneado
+pred_multi <- predict(modelo_multi_tuned, newdata = test_multi)
+
+cm_multi <- confusionMatrix(pred_multi, test_multi$precio_cat)
+print(cm_multi)
+
+# Visualización matriz de confusión
+as.data.frame(cm_multi$table) %>%
+  ggplot(aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), fontface = "bold", size = 6) +
+  scale_fill_gradient(low = "#E3F2FD", high = "#1565C0") +
+  labs(title    = "Matriz de Confusión – Regresión Logística Multinomial",
+       subtitle = paste0("Accuracy = ",
+                         round(cm_multi$overall["Accuracy"] * 100, 2), "%"),
+       x = "Categoría real", y = "Categoría predicha") +
+  theme_minimal()
+```
+
+Se construyó un modelo de Regresión Logística Multinomial para clasificar las propiedades en las tres categorías de precio definidas desde el Laboratorio 4: barata (≤$136), media ($136-$250) y cara (>$250), usando las mismas 5 variables predictoras de labs anteriores. El modelo toma como categoría de referencia barata, por lo que los coeficientes de cara y media se interpretan en relación a ella. Para cara, bathrooms (0.792) y accommodates (0.537) son los predictores más influyentes, mientras que number_of_reviews (-0.004) reduce la probabilidad de ser cara.
+
+Para media los coeficientes son menores en magnitud, lo que indica que la separación entre barata y media es menos marcada que entre barata y cara. El AIC del modelo es 87,265.38 y el BIC 87,370.83.
+Para el tuneo se probaron 6 valores de decay (0, 0.001, 0.01, 0.1, 0.5 y 1), que es el parámetro de regularización del modelo multinomial equivalente al lambda de Ridge y Lasso. El gráfico muestra que el Accuracy mejora progresivamente conforme aumenta el decay, alcanzando su mejor valor con decay=1 y un Accuracy de 58.35% en validación cruzada. Esto indica que una penalización más fuerte sobre los coeficientes mejora la capacidad de generalización del modelo.
+
+Evaluado sobre el conjunto de prueba, el modelo tuneado alcanzó un Accuracy de 58.41%. La matriz de confusión muestra que la clase mejor identificada es cara con 2,514 aciertos, mientras que media sigue siendo la más difícil de clasificar con 1,843 propiedades medias clasificadas incorrectamente como baratas, repitiendo el patrón observado en todos los modelos de clasificación anteriores donde el segmento intermedio del mercado es el más ambiguo para cualquier algoritmo.
+
+# Actividad 12 - Comparación final de todos los modelos de clasificación
+```{r comparacion-final}
+# Actividad 12: Comparación final de todos los modelos de clasificación
+comparacion_final <- data.frame(
+  Modelo = c("Naive Bayes",
+             "KNN (k=220)",
+             "Árbol de Decisión",
+             "Random Forest",
+             "RL Multinomial",
+             "RL Binaria (umbral Youden)"),
+  Accuracy = c(42.26, 59.37, 69.24, 84.46, 58.41, 76.30),
+  Kappa    = c(0.1184, 0.3904, 0.5380, 0.7664, 0.3800, 0.4821)
+)
+
+print(comparacion_final)
+
+# Gráfico de Accuracy
+ggplot(comparacion_final,
+       aes(x = reorder(Modelo, Accuracy), y = Accuracy, fill = Modelo)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  geom_text(aes(label = paste0(Accuracy, "%")),
+            hjust = -0.1, fontface = "bold") +
+  coord_flip() +
+  ylim(0, 100) +
+  labs(title    = "Comparación de Accuracy – Todos los modelos de clasificación",
+       subtitle = "Mayor Accuracy = mejor clasificación",
+       x = NULL, y = "Accuracy (%)") +
+  theme_minimal()
+
+# Gráfico de Kappa
+ggplot(comparacion_final,
+       aes(x = reorder(Modelo, Kappa), y = Kappa, fill = Modelo)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  geom_text(aes(label = Kappa), hjust = -0.1, fontface = "bold") +
+  coord_flip() +
+  ylim(0, 1) +
+  labs(title    = "Comparación de Kappa – Todos los modelos de clasificación",
+       subtitle = "Mayor Kappa = mejor concordancia más allá del azar",
+       x = NULL, y = "Kappa") +
+  theme_minimal()
+```
+La comparación final entre todos los modelos de clasificación evaluados a lo largo de los laboratorios muestra un ranking claro y consistente tanto en Accuracy como en Kappa. Random Forest es el modelo ganador indiscutible con un Accuracy de 84.46% y Kappa de 0.7664, superando a todos los demás por un margen considerable. Su capacidad de combinar múltiples árboles de decisión le permite capturar relaciones complejas entre las variables que ningún otro algoritmo logra detectar de forma individual.
+
+En segundo lugar destaca la Regresión Logística Binaria con umbral Youden con 76.30% de Accuracy y Kappa de 0.4821, superando incluso al Árbol de Decisión (69.24%, Kappa 0.538) en términos de Accuracy aunque con un Kappa ligeramente menor. Esto evidencia que ajustar el umbral de decisión puede mejorar significativamente el desempeño de la Regresión Logística frente a su configuración base.
+
+El Árbol de Decisión queda en tercer lugar con 69.24% y Kappa de 0.538, seguido de KNN con 59.37% y la Regresión Logística Multinomial con 58.41%, ambos con resultados muy similares. Finalmente, Naive Bayes sigue siendo el peor clasificador con apenas 42.26% y Kappa de 0.1184, prácticamente rozando el nivel del azar.
+En cuanto al tiempo de procesamiento, la Regresión Logística fue el algoritmo más rápido con apenas 0.08ms, mientras que KNN fue el más lento por su necesidad de calcular distancias con todos los puntos del dataset. En conclusión, para SmartStay Advisors el modelo recomendado sigue siendo Random Forest por su superioridad clara en todas las métricas evaluadas.

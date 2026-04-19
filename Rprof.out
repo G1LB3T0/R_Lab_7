@@ -1,9 +1,5 @@
 memory profiling: sample.interval=20000
-:11772485:74640234:266709128:9:
-:11772485:74640234:266709128:0:
-:11772485:74640234:266709128:0:
-:11777865:76986799:267593424:377:".Call" "linkinv" "glm.fit" "eval" "eval" "glm" 
-:11778124:82291217:267629824:57:".Call" "mu.eta" "glm.fit" "eval" "eval" "glm" 
-:11778374:88176945:267665664:47:"glm.fit" "eval" "eval" "glm" 
-:11778619:90623373:267699544:42:"dbinom" "aic" "glm.fit" "eval" "eval" "glm" 
-:11779524:90624335:267834168:86:
+:11387453:83379300:269959480:365:"glm.fit" "eval" "eval" "glm" "eval" "eval" "withVisible" "withCallingHandlers" "eval" "eval" "with_handlers" "doWithOneRestart" "withOneRestart" "withRestartList" "doWithOneRestart" "withOneRestart" "withRestartList" "withRestarts" "evaluate::evaluate" "evaluate" "in_dir" "in_input_dir" "eng_r" "block_exec" "call_block" "process_group" "withCallingHandlers" "with_options" "xfun:::handle_error" "process_file" "knitr::knit" "rmarkdown::render" 
+:11387648:86261608:269976728:30:".Call" "glm.fit" "eval" "eval" "glm" "eval" "eval" "withVisible" "withCallingHandlers" "eval" "eval" "with_handlers" "doWithOneRestart" "withOneRestart" "withRestartList" "doWithOneRestart" "withOneRestart" "withRestartList" "withRestarts" "evaluate::evaluate" "evaluate" "in_dir" "in_input_dir" "eng_r" "block_exec" "call_block" "process_group" "withCallingHandlers" "with_options" "xfun:::handle_error" "process_file" "knitr::knit" "rmarkdown::render" 
+:11387826:90766732:270006632:41:".Call" "glm.fit" "eval" "eval" "glm" "eval" "eval" "withVisible" "withCallingHandlers" "eval" "eval" "with_handlers" "doWithOneRestart" "withOneRestart" "withRestartList" "doWithOneRestart" "withOneRestart" "withRestartList" "withRestarts" "evaluate::evaluate" "evaluate" "in_dir" "in_input_dir" "eng_r" "block_exec" "call_block" "process_group" "withCallingHandlers" "with_options" "xfun:::handle_error" "process_file" "knitr::knit" "rmarkdown::render" 
+:11388167:94593764:270048184:57:"which" "ifelse" "aic" "glm.fit" "eval" "eval" "glm" "eval" "eval" "withVisible" "withCallingHandlers" "eval" "eval" "with_handlers" "doWithOneRestart" "withOneRestart" "withRestartList" "doWithOneRestart" "withOneRestart" "withRestartList" "withRestarts" "evaluate::evaluate" "evaluate" "in_dir" "in_input_dir" "eng_r" "block_exec" "call_block" "process_group" "withCallingHandlers" "with_options" "xfun:::handle_error" "process_file" "knitr::knit" "rmarkdown::render" 
