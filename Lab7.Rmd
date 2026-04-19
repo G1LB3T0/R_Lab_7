@@ -482,3 +482,64 @@ print(comparacion_umbrales)
 ```
 Al adoptar este nuevo umbral, se evidencian mejoras sustanciales en el desempeño del modelo. La sensibilidad aumenta de 48.54% a 74.90%, lo que representa un incremento significativo de 26 puntos porcentuales y permite identificar aproximadamente tres de cada cuatro propiedades de alto valor, frente a solo la mitad bajo el umbral anterior.
 
+
+# Actividad 10. Mejor modelo
+```{r}
+prob_ridge <- predict(modelo_ridge, x_test, s = "lambda.min", type = "response")
+prob_lasso <- predict(modelo_lasso, x_test, s = "lambda.min", type = "response")
+auc_ridge  <- as.numeric(auc(roc(y_test, as.numeric(prob_ridge), quiet = TRUE)))
+auc_lasso  <- as.numeric(auc(roc(y_test, as.numeric(prob_lasso), quiet = TRUE)))
+
+
+dev_ridge <- deviance(modelo_ridge$glmnet.fit)[which(modelo_ridge$glmnet.fit$lambda == modelo_ridge$lambda.min)]
+df_ridge  <- modelo_ridge$glmnet.fit$df[which(modelo_ridge$glmnet.fit$lambda == modelo_ridge$lambda.min)]
+aic_ridge <- dev_ridge + 2 * df_ridge
+bic_ridge <- dev_ridge + log(nrow(train_rl)) * df_ridge
+
+dev_lasso <- deviance(modelo_lasso$glmnet.fit)[which(modelo_lasso$glmnet.fit$lambda == modelo_lasso$lambda.min)]
+df_lasso  <- modelo_lasso$glmnet.fit$df[which(modelo_lasso$glmnet.fit$lambda == modelo_lasso$lambda.min)]
+aic_lasso <- dev_lasso + 2 * df_lasso
+bic_lasso <- dev_lasso + log(nrow(train_rl)) * df_lasso
+
+
+comparacion_final <- data.frame(
+  Modelo = c("Base (umbral 0.5)", "Base (umbral Youden)", "Ridge", "Lasso"),
+  Accuracy          = round(c(cm_cara$overall["Accuracy"],
+                              cm_youden$overall["Accuracy"],
+                              cm_ridge$overall["Accuracy"],
+                              cm_lasso$overall["Accuracy"]) * 100, 2),
+  Kappa             = round(c(cm_cara$overall["Kappa"],
+                              cm_youden$overall["Kappa"],
+                              cm_ridge$overall["Kappa"],
+                              cm_lasso$overall["Kappa"]), 4),
+  Sensibilidad      = round(c(cm_cara$byClass["Sensitivity"],
+                              cm_youden$byClass["Sensitivity"],
+                              cm_ridge$byClass["Sensitivity"],
+                              cm_lasso$byClass["Sensitivity"]) * 100, 2),
+  Especificidad     = round(c(cm_cara$byClass["Specificity"],
+                              cm_youden$byClass["Specificity"],
+                              cm_ridge$byClass["Specificity"],
+                              cm_lasso$byClass["Specificity"]) * 100, 2),
+  F1_Score          = round(c(cm_cara$byClass["F1"],
+                              cm_youden$byClass["F1"],
+                              cm_ridge$byClass["F1"],
+                              cm_lasso$byClass["F1"]), 4),
+  Balanced_Accuracy = round(c(cm_cara$byClass["Balanced Accuracy"],
+                              cm_youden$byClass["Balanced Accuracy"],
+                              cm_ridge$byClass["Balanced Accuracy"],
+                              cm_lasso$byClass["Balanced Accuracy"]) * 100, 2),
+  AUC   = round(c(auc_val, auc_val, auc_ridge, auc_lasso), 4),
+  AIC   = round(c(AIC(modelo_cara$finalModel),
+                  AIC(modelo_cara$finalModel),
+                  aic_ridge, aic_lasso), 2),
+  BIC   = round(c(BIC(modelo_cara$finalModel),
+                  BIC(modelo_cara$finalModel),
+                  bic_ridge, bic_lasso), 2)
+)
+print(comparacion_final)
+```
+El análisis comparativo de los modelos evaluados evidencia que todos presentan una capacidad discriminativa prácticamente equivalente, con valores de AUC en un rango estrecho. Esta similitud indica que, al compartir la misma base algorítmica, las distintas estrategias de regularización. 
+
+La comparación entre los modelos Base y Lasso bajo el umbral tradicional de 0.5 revela un empate técnico. Ambos presentan niveles similares de accuracy entre el 77%, y sensibilidad entre el 48%, lo que evidencia una limitada capacidad para identificar propiedades de alto valor. En este contexto, Lasso no aporta mejoras sustanciales respecto al modelo Base.
+
+Sin embargo, al ajustar el umbral de decisión del modelo Base a 0.30 se observa una mejora significativa en las métricas clave. En consecuencia, el modelo seleccionado es la regresión logística base con un umbral de decisión de 0.30. Es importante destacar que este ajuste no modifica la estructura matemática del modelo ni sus valores de AIC/BIC, sino únicamente la distribución de errores, alineándola de manera más efectiva con los objetivos del negocio.
