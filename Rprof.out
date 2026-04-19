@@ -1,8 +1,9 @@
 memory profiling: sample.interval=20000
-:12674576:117487375:460220824:348:"variance" "glm.fit" "eval" "eval" "glm" 
-:12674580:117705366:460222112:0:"glm.fit" "eval" "eval" "glm" 
-:12674580:117705366:460222112:0:"glm.fit" "eval" "eval" "glm" 
-:12674580:117705366:460222112:0:"glm.fit" "eval" "eval" "glm" 
-:11756353:94001754:266272328:64:"glm.fit" "eval" "eval" "glm" 
-:11757440:99960661:266419048:130:".Call" ".rs.objectSize" ".rs.estimatedObjectSize" ".rs.describeObject" 
-:11757440:99960661:266419048:0:".Call" ".rs.objectSize" ".rs.estimatedObjectSize" ".rs.describeObject" 
+:11772485:74640234:266709128:9:
+:11772485:74640234:266709128:0:
+:11772485:74640234:266709128:0:
+:11777865:76986799:267593424:377:".Call" "linkinv" "glm.fit" "eval" "eval" "glm" 
+:11778124:82291217:267629824:57:".Call" "mu.eta" "glm.fit" "eval" "eval" "glm" 
+:11778374:88176945:267665664:47:"glm.fit" "eval" "eval" "glm" 
+:11778619:90623373:267699544:42:"dbinom" "aic" "glm.fit" "eval" "eval" "glm" 
+:11779524:90624335:267834168:86:

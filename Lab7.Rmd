@@ -17,6 +17,7 @@ library(ggplot2)
 library(caret)
 library(corrplot)
 library(glmnet)
+library(pROC)
 ```
 
 ```{r carga-datos-rl}
@@ -399,3 +400,85 @@ cat("Tiempo de ejecución:", pm$sampling.time, "ms\n")
 cat("Memoria utilizada:  ", sum(pm$by.total$mem.total), "MB\n")
 ```
 En cuanto al rendimiento computacional, el modelo de Regresión Logística resultó ser extremadamente eficiente en tiempo, completando su entrenamiento en apenas **0.08 ms**, lo que lo convierte en uno de los algoritmos más rápidos de todos los evaluados en los laboratorios anteriores. Esto contrasta notablemente con KNN que tardó varios minutos con el mismo dataset. La memoria utilizada fue de **372.2 MB**, un consumo moderado considerando que el dataset de entrenamiento tiene 48,442 observaciones. Esta eficiencia computacional es una ventaja importante de la Regresión Logística frente a algoritmos como Random Forest o KNN, ya que permite reentrenar el modelo rápidamente ante nuevos datos sin un costo computacional elevado, lo cual es relevante para SmartStay Advisors en un entorno donde los precios y disponibilidad de propiedades cambian constantemente.
+
+
+# Actividad 9: Búsqueda del umbral.
+```{r}
+coords_roc <- coords(roc_cara, x = "all",
+                     ret = c("threshold", "sensitivity", "specificity", "youden"),
+                     transpose = FALSE)
+
+
+umbral_optimo <- coords_roc$threshold[which.max(coords_roc$youden)]
+sens_opt      <- coords_roc$sensitivity[which.max(coords_roc$youden)]
+spec_opt      <- coords_roc$specificity[which.max(coords_roc$youden)]
+youden_max    <- max(coords_roc$youden)
+
+cat("------ Umbral óptimo según Youden ------\n")
+cat("Umbral óptimo :", round(umbral_optimo, 4), "\n")
+cat("Sensibilidad  :", round(sens_opt, 4), "\n")
+cat("Especificidad :", round(spec_opt, 4), "\n")
+cat("Índice Youden :", round(youden_max, 4), "\n")
+
+
+df_coords <- data.frame(
+  Umbral        = coords_roc$threshold,
+  Sensibilidad  = coords_roc$sensitivity,
+  Especificidad = coords_roc$specificity,
+  Youden        = coords_roc$youden
+) %>%
+  filter(is.finite(Umbral))
+
+df_largo <- df_coords %>%
+  pivot_longer(cols = c(Sensibilidad, Especificidad, Youden),
+               names_to = "Metrica", values_to = "Valor")
+
+ggplot(df_largo, aes(x = Umbral, y = Valor, color = Metrica)) +
+  geom_line(size = 1) +
+  geom_vline(xintercept = umbral_optimo, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dotted", color = "gray40") +
+  labs(title    = "Sensibilidad, Especificidad y Youden vs Umbral",
+       subtitle = paste("Umbral óptimo =", round(umbral_optimo, 3),
+                        "| Umbral por defecto = 0.5"),
+       x = "Umbral de decisión", y = "Valor") +
+  theme_minimal() +
+  scale_color_manual(values = c("Sensibilidad"  = "firebrick",
+                                "Especificidad" = "steelblue",
+                                "Youden"        = "darkgreen"))
+
+
+pred_youden <- ifelse(pred_prob_cara >= umbral_optimo, 1, 0)
+cm_youden   <- confusionMatrix(as.factor(pred_youden),
+                               as.factor(test_rl$es_cara),
+                               positive = "1")
+print(cm_youden)
+```
+Los resultados obtenidos confirman la pertinencia de ajustar el umbral de clasificación a 0.30 en lugar del valor convencional de 0.50. El gráfico respalda que la curva de Youden alcanza su máximo precisamente en 0.30, punto en el cual se observa un equilibrio adecuado entre la sensibilidad y la especificidad.
+
+
+# umbral 0.5 vs umbral Youden
+```{r}
+comparacion_umbrales <- data.frame(
+  Metrica = c("Accuracy", "Kappa", "Sensibilidad", "Especificidad",
+              "Precisión (PPV)", "F1-Score", "Balanced Accuracy"),
+  Umbral_0.5 = round(c(cm_cara$overall["Accuracy"],
+                       cm_cara$overall["Kappa"],
+                       cm_cara$byClass["Sensitivity"],
+                       cm_cara$byClass["Specificity"],
+                       cm_cara$byClass["Pos Pred Value"],
+                       cm_cara$byClass["F1"],
+                       cm_cara$byClass["Balanced Accuracy"]), 4),
+  Umbral_Youden = round(c(cm_youden$overall["Accuracy"],
+                          cm_youden$overall["Kappa"],
+                          cm_youden$byClass["Sensitivity"],
+                          cm_youden$byClass["Specificity"],
+                          cm_youden$byClass["Pos Pred Value"],
+                          cm_youden$byClass["F1"],
+                          cm_youden$byClass["Balanced Accuracy"]), 4)
+)
+comparacion_umbrales$Diferencia <- round(
+  comparacion_umbrales$Umbral_Youden - comparacion_umbrales$Umbral_0.5, 4)
+print(comparacion_umbrales)
+```
+Al adoptar este nuevo umbral, se evidencian mejoras sustanciales en el desempeño del modelo. La sensibilidad aumenta de 48.54% a 74.90%, lo que representa un incremento significativo de 26 puntos porcentuales y permite identificar aproximadamente tres de cada cuatro propiedades de alto valor, frente a solo la mitad bajo el umbral anterior.
+
